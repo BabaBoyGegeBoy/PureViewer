@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("PureViewer")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+fcad4f0436c83062fdd485ebc7407d9ef7c787fc")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+2008373a176058d95b50aeb37c852396e3c9d0e6")]
 [assembly: System.Reflection.AssemblyProductAttribute("PureViewer")]
 [assembly: System.Reflection.AssemblyTitleAttribute("PureViewer")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

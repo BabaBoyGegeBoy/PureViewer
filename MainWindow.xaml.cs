@@ -4,12 +4,12 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 
 namespace PureViewer
 {
-    // Thumbnail item for grid view
     public class ThumbItem
     {
         public BitmapImage? Thumbnail { get; set; }
@@ -56,13 +56,71 @@ namespace PureViewer
         // View mode
         private bool _isGridView;
 
+        // Bottom bar collapse
+        private bool _bottomBarExpanded;
+        private readonly DispatcherTimer _bottomBarTimer;
+
+        // Sidebar
+        private bool _sidebarOpen;
+
         public MainWindow()
         {
             InitializeComponent();
             _gifTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
             _gifTimer.Tick += OnGifFrameTick;
 
+            _bottomBarTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+            _bottomBarTimer.Tick += (_, _) => CollapseBottomBar();
+
             SearchBox.Text = (string)SearchBox.Tag;
+        }
+
+        // ── Bottom Bar Expand / Collapse ───────────────────────
+
+        private void BottomTrigger_MouseEnter(object sender, MouseEventArgs e)
+        {
+            ExpandBottomBar();
+        }
+
+        private void ExpandBottomBar()
+        {
+            if (_bottomBarExpanded) return;
+            _bottomBarExpanded = true;
+            _bottomBarTimer.Stop();
+
+            var anim = new DoubleAnimation(0, 36, TimeSpan.FromMilliseconds(150));
+            BottomBar.BeginAnimation(FrameworkElement.HeightProperty, anim);
+            BottomTrigger.Visibility = Visibility.Collapsed;
+        }
+
+        private void CollapseBottomBar()
+        {
+            if (!_bottomBarExpanded) return;
+            _bottomBarExpanded = false;
+            _bottomBarTimer.Stop();
+
+            var anim = new DoubleAnimation(36, 0, TimeSpan.FromMilliseconds(150));
+            anim.Completed += (_, _) => BottomTrigger.Visibility = Visibility.Visible;
+            BottomBar.BeginAnimation(FrameworkElement.HeightProperty, anim);
+        }
+
+        // Keep bottom bar open while hovering on it
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+
+            if (_bottomBarExpanded)
+            {
+                var pos = e.GetPosition(BottomBar);
+                if (pos.X >= 0 && pos.X <= BottomBar.ActualWidth &&
+                    pos.Y >= 0 && pos.Y <= BottomBar.ActualHeight)
+                {
+                    _bottomBarTimer.Stop();
+                    return;
+                }
+                _bottomBarTimer.Stop();
+                _bottomBarTimer.Start();
+            }
         }
 
         // ── Folder Selection ──────────────────────────────────
@@ -93,7 +151,7 @@ namespace PureViewer
                 .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-            // Parse authors from subfolder names
+            // Parse authors
             _authorImages.Clear();
             foreach (var file in _allImageFiles)
             {
@@ -125,8 +183,6 @@ namespace PureViewer
                 AuthorList.Items.Add(author);
             AuthorList.SelectedIndex = 0;
 
-            AuthorSidebar.Visibility = _authorImages.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
-
             // Populate tag filter
             TagFilter.Items.Clear();
             TagFilter.Items.Add("全部标签");
@@ -135,7 +191,7 @@ namespace PureViewer
             TagFilter.SelectedIndex = 0;
 
             FolderText.Text = _allImageFiles.Count > 0
-                ? $"共 {_allImageFiles.Count} 张图片{(IncludeSubfolders.IsChecked == true ? "（含子文件夹）" : "")} - {path}"
+                ? $"共 {_allImageFiles.Count} 张{(IncludeSubfolders.IsChecked == true ? "（含子）" : "")} - {path}"
                 : $"未找到图片 - {path}";
 
             ApplyFilter();
@@ -190,15 +246,12 @@ namespace PureViewer
         {
             IEnumerable<string> filtered = _allImageFiles;
 
-            // Author filter
             if (_selectedAuthor != null && _authorImages.TryGetValue(_selectedAuthor, out var authorFiles))
                 filtered = filtered.Intersect(authorFiles);
 
-            // Tag filter
             if (_selectedTag != null && _tagImages.TryGetValue(_selectedTag, out var tagFiles))
                 filtered = filtered.Intersect(tagFiles);
 
-            // Search filter
             var keyword = GetSearchText();
             if (!string.IsNullOrEmpty(keyword))
                 filtered = filtered.Where(f =>
@@ -209,7 +262,7 @@ namespace PureViewer
             _imageFiles = filtered.OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToList();
 
             FolderText.Text = _allImageFiles.Count > 0
-                ? $"共 {_imageFiles.Count}/{_allImageFiles.Count} 张{(IncludeSubfolders.IsChecked == true ? "（含子文件夹）" : "")} - {_rootPath}"
+                ? $"共 {_imageFiles.Count}/{_allImageFiles.Count} 张{(IncludeSubfolders.IsChecked == true ? "（含子）" : "")} - {_rootPath}"
                 : $"未找到图片 - {_rootPath}";
 
             if (_imageFiles.Count > 0)
@@ -225,6 +278,7 @@ namespace PureViewer
                 LoadingText.Visibility = Visibility.Collapsed;
                 _currentIndex = -1;
                 Title = "PureViewer";
+                PageInfo.Text = "";
                 ThumbGrid.ItemsSource = null;
             }
         }
@@ -245,6 +299,12 @@ namespace PureViewer
                 _selectedAuthor = selected == "全部" ? null : selected;
                 ApplyFilter();
             }
+        }
+
+        private void ToggleSidebar()
+        {
+            _sidebarOpen = !_sidebarOpen;
+            AuthorSidebar.Visibility = _sidebarOpen ? Visibility.Visible : Visibility.Collapsed;
         }
 
         // ── Tag Filter ─────────────────────────────────────────
@@ -288,6 +348,7 @@ namespace PureViewer
 
             var path = _imageFiles[_currentIndex];
             Title = $"PureViewer - {_currentIndex + 1}/{_imageFiles.Count} - {Path.GetFileName(path)}";
+            PageInfo.Text = $"{_currentIndex + 1}/{_imageFiles.Count}";
 
             try
             {
@@ -405,14 +466,12 @@ namespace PureViewer
         {
             if (Keyboard.Modifiers == ModifierKeys.Control)
             {
-                // Zoom
                 if (e.Delta > 0) ZoomIn();
                 else ZoomOut();
                 e.Handled = true;
             }
             else
             {
-                // Navigate
                 if (e.Delta > 0) Navigate(-1);
                 else Navigate(1);
                 e.Handled = true;
@@ -421,8 +480,7 @@ namespace PureViewer
 
         private void Window_MouseWheel(object sender, MouseWheelEventArgs e)
         {
-            // Fallback: if mouse is not over the ScrollViewer
-            if (Keyboard.Modifiers == ModifierKeys.Control) return; // handled by ScrollViewer
+            if (Keyboard.Modifiers == ModifierKeys.Control) return;
             if (e.Delta > 0) Navigate(-1);
             else if (e.Delta < 0) Navigate(1);
         }
@@ -451,17 +509,10 @@ namespace PureViewer
             ImageScale.ScaleY = _zoomLevel;
             ZoomText.Text = $"{(int)(_zoomLevel * 100)}%";
 
-            // Hide scrollbars when at 1x (fit mode)
-            if (_zoomLevel <= 1.0)
-            {
-                ImageScroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
-                ImageScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
-            }
-            else
-            {
-                ImageScroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Auto;
-                ImageScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
-            }
+            ImageScroll.HorizontalScrollBarVisibility = _zoomLevel <= 1.0
+                ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto;
+            ImageScroll.VerticalScrollBarVisibility = _zoomLevel <= 1.0
+                ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto;
         }
 
         // ── Drag Pan ───────────────────────────────────────────
@@ -503,14 +554,15 @@ namespace PureViewer
             {
                 ThumbGrid.Visibility = Visibility.Visible;
                 ImageContainer.Visibility = Visibility.Collapsed;
-                ToggleViewBtn.Content = "大图 (G)";
+                ToggleViewBtn.Content = "大图";
                 RefreshThumbnails();
+                ExpandBottomBar();
             }
             else
             {
                 ThumbGrid.Visibility = Visibility.Collapsed;
                 ImageContainer.Visibility = Visibility.Visible;
-                ToggleViewBtn.Content = "缩略图 (G)";
+                ToggleViewBtn.Content = "缩略图";
             }
         }
 
@@ -546,9 +598,8 @@ namespace PureViewer
                 if (idx >= 0)
                 {
                     _currentIndex = idx;
-                    // Switch to reading view
                     _isGridView = true;
-                    ToggleView();  // toggle back to reading view
+                    ToggleView();
                     ShowImage();
                 }
             }
@@ -610,6 +661,10 @@ namespace PureViewer
                 case Key.G:
                     ToggleView();
                     break;
+                case Key.Tab:
+                    ToggleSidebar();
+                    e.Handled = true;
+                    break;
                 case Key.OemPlus:
                 case Key.Add:
                     if (Keyboard.Modifiers == ModifierKeys.Control) { ZoomIn(); e.Handled = true; }
@@ -627,6 +682,7 @@ namespace PureViewer
         protected override void OnClosed(EventArgs e)
         {
             StopGif();
+            _bottomBarTimer.Stop();
             base.OnClosed(e);
         }
     }

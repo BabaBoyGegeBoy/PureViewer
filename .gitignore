@@ -1,0 +1,29 @@
+## Build output
+bin/
+obj/
+
+## User-specific project settings
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Visual Studio
+.vs/
+*.vsidx
+*.vspscc
+*.vsscc
+*.vspx
+*.sap
+
+## Build logs
+build_output.txt
+
+## OS junk
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+## Codebuddy working memory (local only)
+.codebuddy/
