@@ -11,6 +11,7 @@
             <Setter Property="Background" Value="#FF555555"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="BorderBrush" Value="#FF666666"/>
+            <Setter Property="Focusable" Value="False"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -125,7 +126,8 @@
                       SelectionChanged="ThumbGrid_SelectionChanged"
                       Background="#FF3C3C3C" BorderThickness="0"
                       Foreground="#FFCCCCCC"
-                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                      ScrollViewer.ScrollChanged="ThumbGrid_ScrollChanged">
                 <ListView.ItemsPanel>
                     <ItemsPanelTemplate>
                         <WrapPanel IsItemsHost="True"/>
