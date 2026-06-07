@@ -7,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using System.Collections.ObjectModel;
 
 namespace PureViewer
 {
@@ -63,6 +64,12 @@ namespace PureViewer
         // Sidebar
         private bool _sidebarOpen;
 
+        // ── Thumbnail lazy loading ──
+        private const int ThumbBatchSize = 50;
+        private int _thumbLoadedCount;
+        private bool _thumbLoading;
+        private readonly ObservableCollection<ThumbItem> _thumbItems = [];
+
         public MainWindow()
         {
             InitializeComponent();
@@ -88,7 +95,7 @@ namespace PureViewer
             _bottomBarExpanded = true;
             _bottomBarTimer.Stop();
 
-            var anim = new DoubleAnimation(0, 36, TimeSpan.FromMilliseconds(150));
+            var anim = new DoubleAnimation(0, 42, TimeSpan.FromMilliseconds(150));
             BottomBar.BeginAnimation(FrameworkElement.HeightProperty, anim);
             BottomTrigger.Visibility = Visibility.Collapsed;
         }
@@ -99,7 +106,7 @@ namespace PureViewer
             _bottomBarExpanded = false;
             _bottomBarTimer.Stop();
 
-            var anim = new DoubleAnimation(36, 0, TimeSpan.FromMilliseconds(150));
+            var anim = new DoubleAnimation(42, 0, TimeSpan.FromMilliseconds(150));
             anim.Completed += (_, _) => BottomTrigger.Visibility = Visibility.Visible;
             BottomBar.BeginAnimation(FrameworkElement.HeightProperty, anim);
         }
@@ -267,6 +274,7 @@ namespace PureViewer
 
             if (_imageFiles.Count > 0)
             {
+                WelcomePanel.Visibility = Visibility.Collapsed;
                 _currentIndex = 0;
                 ResetZoom();
                 ShowImage();
@@ -274,6 +282,7 @@ namespace PureViewer
             }
             else
             {
+                WelcomePanel.Visibility = Visibility.Visible;
                 ImageViewer.Source = null;
                 LoadingText.Visibility = Visibility.Collapsed;
                 _currentIndex = -1;
@@ -569,9 +578,22 @@ namespace PureViewer
         private void RefreshThumbnails()
         {
             if (!_isGridView) return;
-            var items = new List<ThumbItem>();
-            foreach (var file in _imageFiles)
+            _thumbItems.Clear();
+            _thumbLoadedCount = 0;
+            _thumbLoading = false;
+            ThumbGrid.ItemsSource = _thumbItems;
+            LoadNextThumbBatch();
+        }
+
+        private void LoadNextThumbBatch()
+        {
+            if (_thumbLoading || _thumbLoadedCount >= _imageFiles.Count) return;
+            _thumbLoading = true;
+
+            var end = Math.Min(_thumbLoadedCount + ThumbBatchSize, _imageFiles.Count);
+            for (var i = _thumbLoadedCount; i < end; i++)
             {
+                var file = _imageFiles[i];
                 try
                 {
                     var thumb = new BitmapImage();
@@ -580,14 +602,21 @@ namespace PureViewer
                     thumb.DecodePixelWidth = 120;
                     thumb.CacheOption = BitmapCacheOption.OnLoad;
                     thumb.EndInit();
-                    items.Add(new ThumbItem { Thumbnail = thumb, FileName = Path.GetFileName(file), FilePath = file });
+                    _thumbItems.Add(new ThumbItem { Thumbnail = thumb, FileName = Path.GetFileName(file), FilePath = file });
                 }
                 catch
                 {
-                    items.Add(new ThumbItem { FileName = Path.GetFileName(file), FilePath = file });
+                    _thumbItems.Add(new ThumbItem { FileName = Path.GetFileName(file), FilePath = file });
                 }
             }
-            ThumbGrid.ItemsSource = items;
+            _thumbLoadedCount = end;
+            _thumbLoading = false;
+        }
+
+        private void ThumbGrid_ScrollChanged(object sender, ScrollChangedEventArgs e)
+        {
+            if (e.VerticalOffset + e.ViewportHeight >= e.ExtentHeight - 100 && !_thumbLoading)
+                LoadNextThumbBatch();
         }
 
         private void ThumbGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -651,6 +680,13 @@ namespace PureViewer
                     Navigate(1);
                     break;
                 case Key.F11:
+                    if (IsFullscreen) ExitFullscreen();
+                    else EnterFullscreen();
+                    break;
+                case Key.F when Keyboard.Modifiers == ModifierKeys.Control:
+                    SearchBox.Focus();
+                    e.Handled = true;
+                    break;
                 case Key.F:
                     if (IsFullscreen) ExitFullscreen();
                     else EnterFullscreen();

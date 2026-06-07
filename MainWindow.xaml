@@ -150,13 +150,32 @@
                       SelectionChanged="ThumbGrid_SelectionChanged"
                       Background="#FF2E2E2E" BorderThickness="0"
                       Foreground="#FFCCCCCC"
-                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                      ScrollViewer.ScrollChanged="ThumbGrid_ScrollChanged">
                 <ListView.ItemsPanel>
                     <ItemsPanelTemplate>
                         <WrapPanel IsItemsHost="True"/>
                     </ItemsPanelTemplate>
                 </ListView.ItemsPanel>
             </ListView>
+
+            <!-- Welcome guide (shown when no folder loaded, on top of other layers) -->
+            <StackPanel x:Name="WelcomePanel" HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Margin="0,-30,0,0" Background="#FF2E2E2E">
+                <TextBlock Text="PureViewer" Foreground="#FF888888" FontSize="32"
+                           HorizontalAlignment="Center" FontWeight="Light" Margin="0,0,0,16"/>
+                <TextBlock Foreground="#FF777777" FontSize="13" TextAlignment="Center" LineHeight="28">
+                    <Run Text="点击上方 📁 按钮选择文件夹"/><Run Text="  加载图片"/><LineBreak/>
+                    <Run Text="滚轮"/><Run Text="  翻页"/><Run Text="    "/>
+                    <Run Text="← → / A D"/><Run Text="  导航"/><LineBreak/>
+                    <Run Text="F11 / F"/><Run Text="  全屏"/><Run Text="    "/>
+                    <Run Text="G"/><Run Text="  缩略图视图"/><LineBreak/>
+                    <Run Text="Ctrl+F"/><Run Text="  搜索"/><Run Text="    "/>
+                    <Run Text="Tab"/><Run Text="  作者列表"/><LineBreak/>
+                    <Run Text="Ctrl+滚轮 / +−"/><Run Text="  缩放"/><Run Text="    "/>
+                    <Run Text="Ctrl+0"/><Run Text="  重置缩放"/>
+                </TextBlock>
+            </StackPanel>
         </Grid>
     </DockPanel>
 </Window>
