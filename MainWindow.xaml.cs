@@ -4,12 +4,12 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 
 namespace PureViewer
 {
-    // Thumbnail item for grid view
     public class ThumbItem
     {
         public BitmapImage? Thumbnail { get; set; }
@@ -56,13 +56,62 @@ namespace PureViewer
         // View mode
         private bool _isGridView;
 
+        // Auto-hide toolbar
+        private readonly DispatcherTimer _hideTimer;
+        private bool _panelsPinned;  // true when mouse is over a panel
+        private bool _sidebarOpen;
+
         public MainWindow()
         {
             InitializeComponent();
             _gifTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
             _gifTimer.Tick += OnGifFrameTick;
 
+            _hideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+            _hideTimer.Tick += OnHideTimerTick;
+
             SearchBox.Text = (string)SearchBox.Tag;
+        }
+
+        // ── Auto-hide Toolbar ─────────────────────────────────
+
+        private void Window_MouseMove(object sender, MouseEventArgs e)
+        {
+            ShowPanels();
+            _hideTimer.Stop();
+            _hideTimer.Start();
+        }
+
+        private void Panel_MouseEnter(object sender, MouseEventArgs e)
+        {
+            _panelsPinned = true;
+            _hideTimer.Stop();
+        }
+
+        private void Panel_MouseLeave(object sender, MouseEventArgs e)
+        {
+            _panelsPinned = false;
+            _hideTimer.Start();
+        }
+
+        private void OnHideTimerTick(object? sender, EventArgs e)
+        {
+            _hideTimer.Stop();
+            if (!_panelsPinned)
+                HidePanels();
+        }
+
+        private void ShowPanels()
+        {
+            TopBar.Visibility = Visibility.Visible;
+            BottomBar.Visibility = Visibility.Visible;
+        }
+
+        private void HidePanels()
+        {
+            if (SearchBox.IsFocused) return;
+            TopBar.Visibility = Visibility.Collapsed;
+            BottomBar.Visibility = Visibility.Collapsed;
         }
 
         // ── Folder Selection ──────────────────────────────────
@@ -93,7 +142,7 @@ namespace PureViewer
                 .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-            // Parse authors from subfolder names
+            // Parse authors
             _authorImages.Clear();
             foreach (var file in _allImageFiles)
             {
@@ -124,8 +173,6 @@ namespace PureViewer
             foreach (var author in _authorImages.Keys.OrderBy(a => a, StringComparer.OrdinalIgnoreCase))
                 AuthorList.Items.Add(author);
             AuthorList.SelectedIndex = 0;
-
-            AuthorSidebar.Visibility = _authorImages.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
 
             // Populate tag filter
             TagFilter.Items.Clear();
@@ -190,15 +237,12 @@ namespace PureViewer
         {
             IEnumerable<string> filtered = _allImageFiles;
 
-            // Author filter
             if (_selectedAuthor != null && _authorImages.TryGetValue(_selectedAuthor, out var authorFiles))
                 filtered = filtered.Intersect(authorFiles);
 
-            // Tag filter
             if (_selectedTag != null && _tagImages.TryGetValue(_selectedTag, out var tagFiles))
                 filtered = filtered.Intersect(tagFiles);
 
-            // Search filter
             var keyword = GetSearchText();
             if (!string.IsNullOrEmpty(keyword))
                 filtered = filtered.Where(f =>
@@ -245,6 +289,12 @@ namespace PureViewer
                 _selectedAuthor = selected == "全部" ? null : selected;
                 ApplyFilter();
             }
+        }
+
+        private void ToggleSidebar()
+        {
+            _sidebarOpen = !_sidebarOpen;
+            AuthorSidebar.Visibility = _sidebarOpen ? Visibility.Visible : Visibility.Collapsed;
         }
 
         // ── Tag Filter ─────────────────────────────────────────
@@ -405,14 +455,12 @@ namespace PureViewer
         {
             if (Keyboard.Modifiers == ModifierKeys.Control)
             {
-                // Zoom
                 if (e.Delta > 0) ZoomIn();
                 else ZoomOut();
                 e.Handled = true;
             }
             else
             {
-                // Navigate
                 if (e.Delta > 0) Navigate(-1);
                 else Navigate(1);
                 e.Handled = true;
@@ -421,8 +469,7 @@ namespace PureViewer
 
         private void Window_MouseWheel(object sender, MouseWheelEventArgs e)
         {
-            // Fallback: if mouse is not over the ScrollViewer
-            if (Keyboard.Modifiers == ModifierKeys.Control) return; // handled by ScrollViewer
+            if (Keyboard.Modifiers == ModifierKeys.Control) return;
             if (e.Delta > 0) Navigate(-1);
             else if (e.Delta < 0) Navigate(1);
         }
@@ -451,17 +498,10 @@ namespace PureViewer
             ImageScale.ScaleY = _zoomLevel;
             ZoomText.Text = $"{(int)(_zoomLevel * 100)}%";
 
-            // Hide scrollbars when at 1x (fit mode)
-            if (_zoomLevel <= 1.0)
-            {
-                ImageScroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
-                ImageScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
-            }
-            else
-            {
-                ImageScroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Auto;
-                ImageScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
-            }
+            ImageScroll.HorizontalScrollBarVisibility = _zoomLevel <= 1.0
+                ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto;
+            ImageScroll.VerticalScrollBarVisibility = _zoomLevel <= 1.0
+                ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto;
         }
 
         // ── Drag Pan ───────────────────────────────────────────
@@ -502,15 +542,20 @@ namespace PureViewer
             if (_isGridView)
             {
                 ThumbGrid.Visibility = Visibility.Visible;
-                ImageContainer.Visibility = Visibility.Collapsed;
-                ToggleViewBtn.Content = "大图 (G)";
+                ImageScroll.Visibility = Visibility.Collapsed;
+                ToggleViewBtn.Content = "大图";
                 RefreshThumbnails();
+                // Keep panels visible in grid view
+                ShowPanels();
+                _hideTimer.Stop();
             }
             else
             {
                 ThumbGrid.Visibility = Visibility.Collapsed;
-                ImageContainer.Visibility = Visibility.Visible;
-                ToggleViewBtn.Content = "缩略图 (G)";
+                ImageScroll.Visibility = Visibility.Visible;
+                ToggleViewBtn.Content = "缩略图";
+                // Restart auto-hide
+                _hideTimer.Start();
             }
         }
 
@@ -546,9 +591,8 @@ namespace PureViewer
                 if (idx >= 0)
                 {
                     _currentIndex = idx;
-                    // Switch to reading view
                     _isGridView = true;
-                    ToggleView();  // toggle back to reading view
+                    ToggleView();
                     ShowImage();
                 }
             }
@@ -610,6 +654,10 @@ namespace PureViewer
                 case Key.G:
                     ToggleView();
                     break;
+                case Key.Tab:
+                    ToggleSidebar();
+                    e.Handled = true;
+                    break;
                 case Key.OemPlus:
                 case Key.Add:
                     if (Keyboard.Modifiers == ModifierKeys.Control) { ZoomIn(); e.Handled = true; }
@@ -627,6 +675,7 @@ namespace PureViewer
         protected override void OnClosed(EventArgs e)
         {
             StopGif();
+            _hideTimer.Stop();
             base.OnClosed(e);
         }
     }
