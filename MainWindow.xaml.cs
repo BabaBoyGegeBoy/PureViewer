@@ -7,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using System.Collections.ObjectModel;
 
 namespace PureViewer
 {
@@ -60,6 +61,12 @@ namespace PureViewer
         private readonly DispatcherTimer _hideTimer;
         private bool _panelsPinned;  // true when mouse is over a panel
         private bool _sidebarOpen;
+
+        // ── Thumbnail lazy loading ──
+        private const int ThumbBatchSize = 50;
+        private int _thumbLoadedCount;
+        private bool _thumbLoading;
+        private readonly ObservableCollection<ThumbItem> _thumbItems = [];
 
         public MainWindow()
         {
@@ -562,9 +569,22 @@ namespace PureViewer
         private void RefreshThumbnails()
         {
             if (!_isGridView) return;
-            var items = new List<ThumbItem>();
-            foreach (var file in _imageFiles)
+            _thumbItems.Clear();
+            _thumbLoadedCount = 0;
+            _thumbLoading = false;
+            ThumbGrid.ItemsSource = _thumbItems;
+            LoadNextThumbBatch();
+        }
+
+        private void LoadNextThumbBatch()
+        {
+            if (_thumbLoading || _thumbLoadedCount >= _imageFiles.Count) return;
+            _thumbLoading = true;
+
+            var end = Math.Min(_thumbLoadedCount + ThumbBatchSize, _imageFiles.Count);
+            for (var i = _thumbLoadedCount; i < end; i++)
             {
+                var file = _imageFiles[i];
                 try
                 {
                     var thumb = new BitmapImage();
@@ -573,14 +593,21 @@ namespace PureViewer
                     thumb.DecodePixelWidth = 120;
                     thumb.CacheOption = BitmapCacheOption.OnLoad;
                     thumb.EndInit();
-                    items.Add(new ThumbItem { Thumbnail = thumb, FileName = Path.GetFileName(file), FilePath = file });
+                    _thumbItems.Add(new ThumbItem { Thumbnail = thumb, FileName = Path.GetFileName(file), FilePath = file });
                 }
                 catch
                 {
-                    items.Add(new ThumbItem { FileName = Path.GetFileName(file), FilePath = file });
+                    _thumbItems.Add(new ThumbItem { FileName = Path.GetFileName(file), FilePath = file });
                 }
             }
-            ThumbGrid.ItemsSource = items;
+            _thumbLoadedCount = end;
+            _thumbLoading = false;
+        }
+
+        private void ThumbGrid_ScrollChanged(object sender, ScrollChangedEventArgs e)
+        {
+            if (e.VerticalOffset + e.ViewportHeight >= e.ExtentHeight - 100 && !_thumbLoading)
+                LoadNextThumbBatch();
         }
 
         private void ThumbGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)

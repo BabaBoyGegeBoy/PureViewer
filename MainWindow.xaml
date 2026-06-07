@@ -79,7 +79,8 @@
                   SelectionChanged="ThumbGrid_SelectionChanged"
                   Background="#FF1E1E1E" BorderThickness="0"
                   Foreground="#FFCCCCCC"
-                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                  ScrollViewer.ScrollChanged="ThumbGrid_ScrollChanged">
             <ListView.ItemsPanel>
                 <ItemsPanelTemplate>
                     <WrapPanel IsItemsHost="True"/>
