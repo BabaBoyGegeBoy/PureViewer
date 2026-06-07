@@ -18,4 +18,10 @@
 ## 快捷键
 - ←/A: 上一张 | →/D: 下一张 | F11/F: 全屏切换 | Esc: 退出全屏
 - Ctrl+滚轮/+/−: 缩放 | Ctrl+0: 重置缩放 | G: 切换缩略图/大图
-- 纯滚轮: 翻页
+## 用户体验
+- 首次启动显示 WelcomePanel 引导界面（快捷键+操作说明），加载图片后自动隐藏
+
+## 架构注意
+- WPF Window 只能有一个内容子元素，Popup 必须放在 Grid 等容器内部（不能作为 Window 直接子级）
+- Edge 触发区调用与键盘/菜单调用需解耦：Edge 方法签名用 MouseEventArgs（XAML MouseEnter），通用逻辑提取为 ShowXxxPanel() 无参数方法
+- C# switch 中 `case Key.F` 和 `case Key.F when ...` 会冲突，需将带 guard 的 case 放前面
